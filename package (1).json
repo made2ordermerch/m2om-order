@@ -1,0 +1,9 @@
+{
+  "name": "m2om-order-api",
+  "version": "1.0.0",
+  "description": "M2OM Draft Order serverless function",
+  "private": true,
+  "engines": {
+    "node": "18.x"
+  }
+}
