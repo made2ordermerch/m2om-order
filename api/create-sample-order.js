@@ -185,6 +185,14 @@ module.exports = async function handler(req, res) {
         email: email,
         phone: phone,
       },
+      shipping_address: {
+        first_name: firstName,
+        last_name: lastName,
+      },
+      billing_address: {
+        first_name: firstName,
+        last_name: lastName,
+      },
       note: orderNotes,
       email: email,
       shipping_line: { title: 'Free Shipping', price: '0.00' },
