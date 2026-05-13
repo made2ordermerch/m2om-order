@@ -176,6 +176,7 @@ module.exports = async function handler(req, res) {
           quantity: 1,
           price: isCustom ? '99.00' : '0.00',
           taxable: false,
+          requires_shipping: true,
           properties: properties,
         },
       ],
