@@ -3,14 +3,45 @@
 //  Vercel Serverless Function
 //  Endpoint: POST /api/create-sample-order
 //
-//  Handles two order types:
-//    1. FREE Sample Pack (shipping only — $0 line item)
-//    2. $99 Custom Printed Sample (credited toward first order)
+//  Uses same OAuth Client Credentials as create-order.js
 //
-//  Environment variables (set in Vercel dashboard):
+//  Environment variables (already set in Vercel):
 //    SHOPIFY_STORE_DOMAIN   → made2ordermerch.myshopify.com
-//    SHOPIFY_ADMIN_TOKEN    → shpat_xxxxxxxxxxxxxxxxxxxx
+//    SHOPIFY_CLIENT_ID      → (from Shopify app)
+//    SHOPIFY_CLIENT_SECRET  → (from Shopify app)
 // ─────────────────────────────────────────────────────────────
+
+let cachedToken = null;
+let tokenExpiry = 0;
+
+async function getAccessToken(domain, clientId, clientSecret) {
+  const now = Date.now();
+  if (cachedToken && now < tokenExpiry - 60000) {
+    return cachedToken;
+  }
+
+  const res = await fetch(`https://${domain}/admin/oauth/access_token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'client_credentials'
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error('OAuth token error:', err);
+    // Fallback: use secret directly as token
+    return clientSecret;
+  }
+
+  const data = await res.json();
+  cachedToken = data.access_token;
+  tokenExpiry = now + (data.expires_in ? data.expires_in * 1000 : 3600000);
+  return cachedToken;
+}
 
 module.exports = async function handler(req, res) {
 
@@ -23,12 +54,25 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   // ── Env check ──
-  const STORE  = process.env.SHOPIFY_STORE_DOMAIN;
-  const TOKEN  = process.env.SHOPIFY_ADMIN_TOKEN;
+  const STORE = process.env.SHOPIFY_STORE_DOMAIN;
+  const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
+  const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 
-  if (!STORE || !TOKEN) {
+  console.log('Store:', STORE, '| Client ID set:', !!CLIENT_ID, '| Secret set:', !!CLIENT_SECRET);
+
+  if (!STORE || !CLIENT_ID || !CLIENT_SECRET) {
     console.error('Missing Shopify env vars');
     return res.status(500).json({ error: 'Server misconfiguration. Please call us at (614) 353-2369.' });
+  }
+
+  // ── Get token ──
+  let TOKEN;
+  try {
+    TOKEN = await getAccessToken(STORE, CLIENT_ID, CLIENT_SECRET);
+    console.log('Token obtained, length:', TOKEN ? TOKEN.length : 0);
+  } catch (err) {
+    console.error('Token error:', err);
+    return res.status(500).json({ error: 'Authentication failed. Please call us at (614) 353-2369.' });
   }
 
   // ── Parse body ──
@@ -49,7 +93,6 @@ module.exports = async function handler(req, res) {
     social,
     phone,
     monthlyVolume,
-    // Custom sample only:
     bagSize,
     finish,
     artworkNotes,
@@ -72,7 +115,6 @@ module.exports = async function handler(req, res) {
   // ── Build Draft Order ──
   const isCustom = sampleType === 'custom';
 
-  // Order notes with all lead info
   const orderNotes = [
     `M2OM SAMPLE REQUEST — ${isCustom ? 'CUSTOM PRINTED SAMPLE ($99)' : 'FREE SAMPLE PACK'}`,
     ``,
@@ -101,7 +143,6 @@ module.exports = async function handler(req, res) {
     `⚠ VERIFY business before shipping: ${website || social}`,
   ].join('\n');
 
-  // Line item properties (visible on order confirmation)
   const properties = [
     { name: 'Brand', value: brandName },
     { name: 'Category', value: productCategory },
@@ -121,10 +162,9 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  // Split name for Shopify customer
   const nameParts = fullName.split(' ');
   const firstName = nameParts[0] || fullName;
-  const lastName  = nameParts.slice(1).join(' ') || '';
+  const lastName = nameParts.slice(1).join(' ') || '';
 
   const draftOrder = {
     draft_order: {
@@ -147,9 +187,7 @@ module.exports = async function handler(req, res) {
       },
       note: orderNotes,
       email: email,
-      shipping_line: isCustom
-        ? { title: 'Included', price: '0.00' }
-        : { title: 'Standard Shipping', price: '0.00' },
+      shipping_line: { title: 'Free Shipping', price: '0.00' },
       tags: isCustom
         ? 'sample-custom, lead, verify-before-ship'
         : 'sample-pack, lead, verify-before-ship',
@@ -159,6 +197,7 @@ module.exports = async function handler(req, res) {
 
   // ── Call Shopify ──
   try {
+    console.log('Sending draft order to Shopify...');
     const shopifyRes = await fetch(
       `https://${STORE}/admin/api/2024-10/draft_orders.json`,
       {
@@ -172,6 +211,7 @@ module.exports = async function handler(req, res) {
     );
 
     const shopifyData = await shopifyRes.json();
+    console.log('Shopify response status:', shopifyRes.status);
 
     if (!shopifyRes.ok) {
       console.error('Shopify API error:', JSON.stringify(shopifyData));
