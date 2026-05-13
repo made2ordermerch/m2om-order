@@ -174,10 +174,17 @@ module.exports = async function handler(req, res) {
             ? 'Custom Printed Sample — Your Design, Your Size'
             : 'M2OM Sample Pack — Pre-Printed Showcase Bags',
           quantity: 1,
-          price: isCustom ? '99.00' : '0.00',
+          price: isCustom ? '199.00' : '0.00',
           taxable: false,
           requires_shipping: true,
           properties: properties,
+          applied_discount: isCustom ? {
+            description: 'Custom Sample Launch Offer',
+            value_type: 'fixed_amount',
+            value: '100.00',
+            amount: '100.00',
+            title: '50% Off — Launch Offer'
+          } : undefined,
         },
       ],
       customer: {
