@@ -53,6 +53,7 @@ module.exports = async function handler(req, res) {
     bagSize,
     finish,
     artworkNotes,
+    artworkUrl,
   } = body;
 
   // ── Validate ──
@@ -90,6 +91,7 @@ module.exports = async function handler(req, res) {
       `Bag Size: ${bagSize}`,
       `Finish: ${finish}`,
       `Artwork/Notes: ${artworkNotes || 'None provided'}`,
+      `Artwork File: ${artworkUrl || 'No file uploaded'}`,
       ``,
       `NOTE: $99 to be credited toward first production order.`,
     ] : [
@@ -113,6 +115,9 @@ module.exports = async function handler(req, res) {
     );
     if (artworkNotes) {
       properties.push({ name: 'Artwork Notes', value: artworkNotes.substring(0, 250) });
+    }
+    if (artworkUrl) {
+      properties.push({ name: 'Artwork File', value: artworkUrl });
     }
   }
 
